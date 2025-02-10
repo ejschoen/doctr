@@ -5,7 +5,7 @@
 
 import time
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, APIRouter, status
 from fastapi.openapi.utils import get_openapi
 
 from app import config as cfg
@@ -13,13 +13,18 @@ from app.routes import detection, kie, ocr, recognition
 
 app = FastAPI(title=cfg.PROJECT_NAME, description=cfg.PROJECT_DESCRIPTION, debug=cfg.DEBUG, version=cfg.VERSION)
 
+router = APIRouter()
+
+@router.get("/healthcheck", response_model=str, status_code=status.HTTP_200_OK)
+def healthcheck():
+    return "OK"
 
 # Routing
 app.include_router(recognition.router, prefix="/recognition", tags=["recognition"])
 app.include_router(detection.router, prefix="/detection", tags=["detection"])
 app.include_router(ocr.router, prefix="/ocr", tags=["ocr"])
 app.include_router(kie.router, prefix="/kie", tags=["kie"])
-
+app.include_router(router, tags=["kubernetes"])
 
 # Middleware
 @app.middleware("http")

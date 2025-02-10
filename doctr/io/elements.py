@@ -313,6 +313,82 @@ class Page(Element):
         """
         return synthesize_page(self.export(), **kwargs)
 
+    def export_page_as_xml(self, parent: ET.ElementTree) -> ET.ElementTree:
+        # iterate over the blocks / lines / words and create the XML elements in body line by line with the attributes
+        height, width = self.dimensions
+        p_idx = self.page_idx
+        block_count: int = 1
+        line_count: int = 1
+        word_count: int = 1
+
+        page = SubElement(
+            parent,
+            "div",
+            attrib={
+                "class": "ocr_page",
+                "id": f"page_{p_idx + 1}",
+                "title": f"image; bbox 0 0 {width} {height}; ppageno 0",
+            },
+        )
+        for block in self.blocks:
+            if len(block.geometry) != 2:
+                raise TypeError("XML export is only available for straight bounding boxes for now.")
+            (xmin, ymin), (xmax, ymax) = block.geometry
+            block_div = SubElement(
+                page,
+                "div",
+                attrib={
+                    "class": "ocr_carea",
+                    "id": f"block_{block_count}",
+                    "title": f"bbox {int(round(xmin * width))} {int(round(ymin * height))} \
+                        {int(round(xmax * width))} {int(round(ymax * height))}",
+                },
+            )
+            paragraph = SubElement(
+                block_div,
+                "p",
+                attrib={
+                    "class": "ocr_par",
+                    "id": f"par_{block_count}",
+                    "title": f"bbox {int(round(xmin * width))} {int(round(ymin * height))} \
+                        {int(round(xmax * width))} {int(round(ymax * height))}",
+                },
+            )
+            block_count += 1
+            for line in block.lines:
+                (xmin, ymin), (xmax, ymax) = line.geometry
+                # NOTE: baseline, x_size, x_descenders, x_ascenders is currently initalized to 0
+                line_span = SubElement(
+                    paragraph,
+                    "span",
+                    attrib={
+                        "class": "ocr_line",
+                        "id": f"line_{line_count}",
+                        "title": f"bbox {int(round(xmin * width))} {int(round(ymin * height))} \
+                            {int(round(xmax * width))} {int(round(ymax * height))}; \
+                            baseline 0 0; x_size 0; x_descenders 0; x_ascenders 0",
+                    },
+                )
+                line_count += 1
+                for word in line.words:
+                    (xmin, ymin), (xmax, ymax) = word.geometry
+                    conf = word.confidence
+                    word_div = SubElement(
+                        line_span,
+                        "span",
+                        attrib={
+                            "class": "ocrx_word",
+                            "id": f"word_{word_count}",
+                            "title": f"bbox {int(round(xmin * width))} {int(round(ymin * height))} \
+                                {int(round(xmax * width))} {int(round(ymax * height))}; \
+                                x_wconf {int(round(conf * 100))}",
+                        },
+                    )
+                    # set the text
+                    word_div.text = word.value
+                    word_count += 1
+        return parent
+
     def export_as_xml(self, file_title: str = "docTR - XML export (hOCR)") -> tuple[bytes, ET.ElementTree]:
         """Export the page as XML (hOCR-format)
         convention: https://github.com/kba/hocr-spec/blob/master/1.2/spec.md
@@ -323,7 +399,6 @@ class Page(Element):
         Returns:
             a tuple of the XML byte string, and its ElementTree
         """
-        p_idx = self.page_idx
         block_count: int = 1
         line_count: int = 1
         word_count: int = 1
@@ -347,74 +422,7 @@ class Page(Element):
         )
         # Create the body
         body = SubElement(page_hocr, "body")
-        SubElement(
-            body,
-            "div",
-            attrib={
-                "class": "ocr_page",
-                "id": f"page_{p_idx + 1}",
-                "title": f"image; bbox 0 0 {width} {height}; ppageno 0",
-            },
-        )
-        # iterate over the blocks / lines / words and create the XML elements in body line by line with the attributes
-        for block in self.blocks:
-            if len(block.geometry) != 2:
-                raise TypeError("XML export is only available for straight bounding boxes for now.")
-            (xmin, ymin), (xmax, ymax) = block.geometry
-            block_div = SubElement(
-                body,
-                "div",
-                attrib={
-                    "class": "ocr_carea",
-                    "id": f"block_{block_count}",
-                    "title": f"bbox {int(round(xmin * width))} {int(round(ymin * height))} \
-                    {int(round(xmax * width))} {int(round(ymax * height))}",
-                },
-            )
-            paragraph = SubElement(
-                block_div,
-                "p",
-                attrib={
-                    "class": "ocr_par",
-                    "id": f"par_{block_count}",
-                    "title": f"bbox {int(round(xmin * width))} {int(round(ymin * height))} \
-                    {int(round(xmax * width))} {int(round(ymax * height))}",
-                },
-            )
-            block_count += 1
-            for line in block.lines:
-                (xmin, ymin), (xmax, ymax) = line.geometry
-                # NOTE: baseline, x_size, x_descenders, x_ascenders is currently initalized to 0
-                line_span = SubElement(
-                    paragraph,
-                    "span",
-                    attrib={
-                        "class": "ocr_line",
-                        "id": f"line_{line_count}",
-                        "title": f"bbox {int(round(xmin * width))} {int(round(ymin * height))} \
-                        {int(round(xmax * width))} {int(round(ymax * height))}; \
-                        baseline 0 0; x_size 0; x_descenders 0; x_ascenders 0",
-                    },
-                )
-                line_count += 1
-                for word in line.words:
-                    (xmin, ymin), (xmax, ymax) = word.geometry
-                    conf = word.confidence
-                    word_div = SubElement(
-                        line_span,
-                        "span",
-                        attrib={
-                            "class": "ocrx_word",
-                            "id": f"word_{word_count}",
-                            "title": f"bbox {int(round(xmin * width))} {int(round(ymin * height))} \
-                            {int(round(xmax * width))} {int(round(ymax * height))}; \
-                            x_wconf {int(round(conf * 100))}",
-                        },
-                    )
-                    # set the text
-                    word_div.text = word.value
-                    word_count += 1
-
+        self.export_page_as_xml(body)
         return (ET.tostring(page_hocr, encoding="utf-8", method="xml"), ET.ElementTree(page_hocr))
 
     @classmethod
@@ -525,7 +533,7 @@ class KIEPage(Element):
         )
         # Create the body
         body = SubElement(page_hocr, "body")
-        SubElement(
+        page = SubElement(
             body,
             "div",
             attrib={
@@ -541,7 +549,7 @@ class KIEPage(Element):
                     raise TypeError("XML export is only available for straight bounding boxes for now.")
                 (xmin, ymin), (xmax, ymax) = prediction.geometry
                 prediction_div = SubElement(
-                    body,
+                    page,
                     "div",
                     attrib={
                         "class": "ocr_carea",
